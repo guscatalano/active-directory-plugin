@@ -161,7 +161,12 @@ public class ActiveDirectorySecurityRealm extends AbstractPasswordBasedSecurityR
         this.domain = fixEmpty(domain);
         this.site = fixEmpty(site);
         this.bindName = fixEmpty(bindName);
-        this.bindPassword = Secret.fromString(fixEmpty(bindPassword));
+        if (fixEmpty(bindPassword) == null)
+        {
+        	this.bindPassword = null;
+        } else {
+        	this.bindPassword = Secret.fromString(fixEmpty(bindPassword));
+        }
         this.groupLookupStrategy = groupLookupStrategy;
         this.removeIrrelevantGroups = removeIrrelevantGroups;
 
@@ -172,6 +177,7 @@ public class ActiveDirectorySecurityRealm extends AbstractPasswordBasedSecurityR
         }
 
         this.server = server;
+        
     }
 
     public GroupLookupStrategy getGroupLookupStrategy() {
@@ -428,9 +434,36 @@ public class ActiveDirectorySecurityRealm extends AbstractPasswordBasedSecurityR
             props.put("java.naming.ldap.factory.socket",TrustAllSocketFactory.class.getName());
 
             NamingException error = null;
-
+            SocketInfo firstServer = null;
+            for (SocketInfo serverx : ldapServers){
+            	String matchStr = principalName.substring(principalName.indexOf("@")+1);
+            	matchStr = matchStr.substring(0, matchStr.indexOf(".")).toLowerCase();
+            	if(matchStr == "europe"){
+            		matchStr = "eu";
+            	}
+            	if(matchStr == "redmond"){
+            		matchStr = "red";
+            	}
+            	//matchStr = matchStr.replaceAll("@", "");
+            	if (serverx.host.toLowerCase().contains(matchStr)){
+            		firstServer = serverx;
+            	}
+            }
+            if(firstServer != null){
+            	try {
+            		//System.out.println("Trying best guess: " + firstServer);
+	            	LOGGER.fine("First guess is: " + firstServer);
+	                LdapContext context = bind(principalName, password, firstServer, props);
+	                LOGGER.fine("Bound to " + firstServer);
+                return context;
+            	} catch(Exception e){
+            		LOGGER.fine("First guess failed: " + e.toString());
+            	}
+            }
+            
             for (SocketInfo ldapServer : ldapServers) {
                 try {
+                	//System.out.println("Trying ldap server: " + ldapServer);
                     LdapContext context = bind(principalName, password, ldapServer, props);
                     LOGGER.fine("Bound to " + ldapServer);
                     return context;
@@ -446,7 +479,9 @@ public class ActiveDirectorySecurityRealm extends AbstractPasswordBasedSecurityR
                     // servers can be configured to hide the distinction between "no such user" and "bad password"
                     // to reveal what user names are available.
                     LOGGER.log(Level.WARNING, "Failed to authenticate while binding to "+ldapServer, e);
-                    throw new BadCredentialsException("Either no such user '"+principalName+"' or incorrect password",e);
+                    //throw new BadCredentialsException("Either no such user '"+principalName+"' or incorrect password",e);
+                    error = e;
+                    //System.out.println("Failed ldap server: " + ldapServer);
                 } catch (NamingException e) {
                     LOGGER.log(Level.WARNING, "Failed to bind to "+ldapServer, e);
                     error = e; // retry

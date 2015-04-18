@@ -252,11 +252,12 @@ public class ActiveDirectoryUnixAuthenticationProvider extends AbstractActiveDir
         // LDAP treats empty password as anonymous bind, so we need to reject it
         if (StringUtils.isEmpty(password))
             throw new BadCredentialsException("Empty password");
-
+        
         String userPrincipalName = getPrincipalName(username, domainName);
         String samAccountName = userPrincipalName.substring(0, userPrincipalName.indexOf('@'));
-
+        //System.out.println("RETRIEVE");
         if (bindName!=null) {
+        	//System.out.println("BINDING");
             // two step approach. Use a special credential to obtain DN for the
             // user trying to login, then authenticate.
             try {
@@ -266,27 +267,48 @@ public class ActiveDirectoryUnixAuthenticationProvider extends AbstractActiveDir
                 throw new AuthenticationServiceException("Failed to bind to LDAP server with the bind name/password", e);
             }
         } else {
+        	//System.out.println("ELSEBIND");
             anonymousBind = password == NO_AUTHENTICATION;
+            //System.out.println("userPrincipalName: " + userPrincipalName);
+            //System.out.println("ldapServers: " + ldapServers);
             try {
                 // if we are just retrieving the user, try using anonymous bind by empty password (see RFC 2829 5.1)
                 // but if that fails, that's not BadCredentialException but UserMayOrMayNotExistException
                 context = descriptor.bind(userPrincipalName, anonymousBind ? "" : password, ldapServers);
+                //System.out.println("GOT_CONTEXT");
             } catch (BadCredentialsException e) {
+            	//System.out.println("badcredsexception: " + e.toString());
                 if (anonymousBind)
                     // in my observation, if we attempt an anonymous bind and AD doesn't allow it, it still passes the bind method
                     // and only fail later when we actually do a query. So perhaps this is a dead path, but I'm leaving it here
                     // anyway as a precaution.
                     throw new UserMayOrMayNotExistException("Unable to retrieve the user information without bind DN/password configured");
                 throw e;
+            } catch(Exception e){
+            	//System.out.println("exception: " + e.toString());
+            	context = null;
             }
+         
         }
 
         try {
             // locate this user's record
             final String domainDN = toDC(domainName);
-
-            Attributes user = new LDAPSearchBuilder(context,domainDN).subTreeScope().searchOne("(& (userPrincipalName={0})(objectCategory=user))",userPrincipalName);
+            //System.out.println("Got DN: " + domainDN);
+            LDAPSearchBuilder searchBuild = new LDAPSearchBuilder(context,domainDN);
+            
+            //System.out.println("LDAPSearchBuilder");
+            LDAPSearchBuilder subTree = searchBuild.subTreeScope();
+            //System.out.println("Subtree");
+            Attributes user = null;
+            try {
+            	user =  subTree.searchOne("(& (userPrincipalName={0})(objectCategory=user))",userPrincipalName);
+            } catch(Exception e){
+            	//System.out.println("SearchONeException: " + e.toString());
+            }
+            //System.out.println("SearchDone");
             if (user==null) {
+            	//System.out.println("User is null");
                 // failed to find it. Fall back to sAMAccountName.
                 // see http://www.nabble.com/Re%3A-Hudson-AD-plug-in-td21428668.html
                 LOGGER.fine("Failed to find "+userPrincipalName+" in userPrincipalName. Trying sAMAccountName");
@@ -295,6 +317,7 @@ public class ActiveDirectoryUnixAuthenticationProvider extends AbstractActiveDir
                     throw new UsernameNotFoundException("Authentication was successful but cannot locate the user information for "+username);
                 }
             }
+            //System.out.println("Got User");
             LOGGER.fine("Found user "+username+" : "+user);
 
             Object dn = user.get("distinguishedName").get();
