@@ -435,15 +435,33 @@ public class ActiveDirectorySecurityRealm extends AbstractPasswordBasedSecurityR
 
             NamingException error = null;
             SocketInfo firstServer = null;
+            
+            String matchStr = principalName.substring(principalName.indexOf("@")+1);
+        	matchStr = matchStr.substring(0, matchStr.indexOf(".")).toLowerCase().trim();
+        	//System.out.println("!!"+matchStr);
+        	if(matchStr.equalsIgnoreCase("europe")){
+        		matchStr = "eu";
+        	}
+        	if(matchStr.equalsIgnoreCase("redmond")){
+        		matchStr = "red";
+        	}
+        	if(matchStr.equalsIgnoreCase("wingroup")){
+        		matchStr = "windows";
+        	}
+        	//System.out.println("!!"+matchStr);
+        	if(!matchStr.equalsIgnoreCase("windows")){
+        		//System.out.println("%%"+principalName);
+        		principalName = principalName.replace("microsoft.com", "corp.microsoft.com");
+        	} else {
+        		System.out.println("##"+principalName);
+        		principalName = principalName.replace("wingroup.microsoft.com", "windows.microsoft.com");
+        		matchStr = "wingroup";
+        		//System.out.println("$$"+principalName);
+        	}
+        	
+        	
+        	//System.out.println("@@"+principalName);
             for (SocketInfo serverx : ldapServers){
-            	String matchStr = principalName.substring(principalName.indexOf("@")+1);
-            	matchStr = matchStr.substring(0, matchStr.indexOf(".")).toLowerCase();
-            	if(matchStr == "europe"){
-            		matchStr = "eu";
-            	}
-            	if(matchStr == "redmond"){
-            		matchStr = "red";
-            	}
             	//matchStr = matchStr.replaceAll("@", "");
             	if (serverx.host.toLowerCase().contains(matchStr)){
             		firstServer = serverx;
